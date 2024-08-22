@@ -364,6 +364,18 @@ public class DefaultClient implements Client {
                 output.accept(Message.buildStatus(
                         "Connected to daemon " + daemon.getDaemon().getId() + ", scanning for projects..."));
 
+                Thread cancelOnShutdown = new Thread("cancel build on shutdown") {
+                    @Override
+                    public void run() {
+                        System.out.println("Client shutdown: sending cancel message");
+                        try {
+                            daemon.dispatch(Message.BareMessage.CANCEL_BUILD_SINGLETON);
+                        } catch (DaemonException.ConnectException ignore) {}
+                    }
+                };
+                System.out.println("adding cancel-on-term hook");
+                Runtime.getRuntime().addShutdownHook(cancelOnShutdown);
+
                 // We've sent the request, so it gives us a bit of time to purge the logs
                 AtomicReference<String> purgeMessage = new AtomicReference<>();
                 Thread purgeLog = new Thread(
@@ -396,6 +408,8 @@ public class DefaultClient implements Client {
                         }
                     }
                 } finally {
+                    System.out.println("removing cancel-on-term hook");
+                    Runtime.getRuntime().removeShutdownHook(cancelOnShutdown);
                     String msg = purgeMessage.get();
                     if (msg != null) {
                         output.accept(Message.err(msg));
